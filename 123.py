@@ -3,6 +3,37 @@ import asyncio
 import re
 import logging
 from datetime import datetime
+from aiohttp import web
+import threading
+
+# Простой HTTP сервер для Render
+async def handle_ping(request):
+    return web.Response(text="Bot is alive")
+
+def start_http_server():
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    app.router.add_get('/ping', handle_ping)
+    app.router.add_get('/health', handle_ping)
+    
+    runner = web.AppRunner(app)
+    
+    async def start():
+        await runner.setup()
+        site = web.TCPSite(runner, '0.0.0.0', 8080)
+        await site.start()
+        print("✅ HTTP сервер запущен на порту 8080")
+    
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start())
+    loop.run_forever()
+
+# Запускаем HTTP сервер в отдельном потоке
+http_thread = threading.Thread(target=start_http_server, daemon=True)
+http_thread.start()
+
 
 # Настройка логирования
 logging.basicConfig(
@@ -361,3 +392,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
