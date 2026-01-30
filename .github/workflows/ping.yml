@@ -1,0 +1,10 @@
+name: Ping Render Bot
+on:
+  schedule:
+    - cron: '*/1 * * * *'  # Каждые 5 минут
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping my bot
+        run: curl -s -o /dev/null -w "Status: %{http_code}" https://one23123123123-te31.onrender.com
