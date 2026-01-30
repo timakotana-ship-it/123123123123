@@ -1,10 +1,31 @@
-name: Ping Render Bot
+name: Keep Bot Alive
 on:
   schedule:
-    - cron: '*/1 * * * *'  # Каждые 5 минут
+    - cron: '*/5 * * * *'  # Каждые 5 минут
+  workflow_dispatch:  # Можно запустить вручную
+
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 5  # Лимит времени
+    
     steps:
-      - name: Ping my bot
-        run: curl -s -o /dev/null -w "Status: %{http_code}" https://one23123123123-te31.onrender.com
+    - name: Ping Telegram Bot
+      run: |
+        echo "🚀 Начинаю пинг бота..."
+        echo "Время запуска: $(date)"
+        
+        # Просто пингуем без сложных проверок
+        STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "https://one23123123123-te31.onrender.com" || echo "CURL_FAILED")
+        
+        echo "Статус HTTP: $STATUS"
+        
+        # Любой ответ кроме таймаута - это успех
+        if [[ "$STATUS" == "CURL_FAILED" ]]; then
+          echo "⚠️  Бот не ответил, возможно спит"
+          exit 0  # Выходим с успехом чтобы workflow не падал
+        else
+          echo "✅ Бот ответил со статусом $STATUS"
+        fi
+        
+        echo "✅ Пинг завершен в $(date)"
