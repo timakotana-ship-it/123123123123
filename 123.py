@@ -34,10 +34,8 @@ TRIGGER_WORDS = [
 
 class SimpleBot:
     def __init__(self):
-        # Используем уникальное имя сессии для избежания конфликтов
-        session_name = 'session_bot_render'
-        if 'RENDER' in os.environ:
-            session_name += '_render'
+        # Используем имя сессии 'session_bot' как у тебя
+        session_name = 'session_bot'
         
         self.client = TelegramClient(session_name, API_ID, API_HASH)
         
@@ -58,16 +56,40 @@ class SimpleBot:
     async def start(self):
         """Запуск бота"""
         try:
+            # Проверяем существует ли сессия
+            session_file = f'{self.client.session.filename}.session'
+            if os.path.exists(session_file):
+                logger.info(f"Найдена сессия: {session_file}")
+                file_size = os.path.getsize(session_file)
+                logger.info(f"Размер файла сессии: {file_size} байт")
+                
+                if file_size == 0:
+                    logger.warning("Файл сессии пустой! Будет создана новая сессия.")
+            
+            # Пробуем подключиться с существующей сессией
             await self.client.start(phone=PHONE_NUMBER)
             self.me = await self.client.get_me()
-            logger.info(f"Авторизован как: {self.me.first_name} (@{self.me.username})")
+            logger.info(f"✅ Авторизован как: {self.me.first_name} (@{self.me.username})")
             logger.info(f"Слушаю триггеры в {len(TARGET_GROUPS)} группах")
             logger.info("Бот запущен! Кидай номер в избранное")
             
             self.register_handlers()
+            
+            # Проверяем соединение
+            await self.client.send_message('me', '🤖 Бот успешно запущен на Render!')
+            
             await self.client.run_until_disconnected()
+            
         except Exception as e:
             logger.error(f"Ошибка запуска: {e}")
+            
+            # Если ошибка авторизации, удаляем сессию
+            if "auth key" in str(e).lower() or "session" in str(e).lower():
+                session_file = f'{self.client.session.filename}.session'
+                if os.path.exists(session_file):
+                    logger.error(f"⚠️ Проблема с сессией. Удаляю: {session_file}")
+                    os.remove(session_file)
+            
             raise
     
     def get_message_link(self, chat_id, message_id, topic_id=0):
@@ -91,20 +113,7 @@ class SimpleBot:
             
             # Для публичных чатов с username
             else:
-                try:
-                    # Используем существующий event loop
-                    import asyncio
-                    loop = asyncio.get_event_loop()
-                    chat = loop.run_until_complete(self.client.get_entity(chat_id))
-                    if hasattr(chat, 'username') and chat.username:
-                        if topic_id and topic_id != 0:
-                            return f"https://t.me/{chat.username}/{topic_id}?thread={message_id}"
-                        else:
-                            return f"https://t.me/{chat.username}/{message_id}"
-                except Exception as e:
-                    logger.warning(f"Не удалось получить username для чата {chat_id}: {e}")
-            
-            return f"chat_id: {chat_id}, message_id: {message_id}"
+                return f"chat_id: {chat_id}, message_id: {message_id}"
             
         except Exception as e:
             logger.error(f"Ошибка формирования ссылки: {e}")
@@ -377,22 +386,22 @@ async def main():
         logger.info("Бот остановлен пользователем")
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
-        if "authorization key" in str(e) and "two different IP addresses" in str(e):
+        if "auth key" in str(e).lower() or "session" in str(e).lower():
             logger.error("""
-            ⚠️ ОШИБКА СЕССИИ!
-            Сессия была использована с разных IP адресов.
+            ⚠️ ПРОБЛЕМА С СЕССИЕЙ!
             Решение:
-            1. В панели Render зайди в консоль (Shell)
-            2. Выполни: rm session_bot_render_render.session*
-            3. Перезапусти деплой
+            1. Убедись что файл session_bot.session есть в проекте
+            2. Убедись что сессия актуальна (создана недавно)
+            3. Если нужно - создай новую сессию локально и залей на GitHub
             """)
     finally:
         logger.info("Бот остановлен")
 
 if __name__ == "__main__":
-    # Проверяем, запущен ли на Render
-    if 'RENDER' in os.environ:
-        logger.info("Запуск на Render обнаружен")
+    # Проверяем файлы в директории
+    logger.info("Содержимое директории:")
+    for file in os.listdir('.'):
+        logger.info(f"  {file}")
     
     # Запускаем бота
     try:
