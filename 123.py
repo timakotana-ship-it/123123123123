@@ -1,5 +1,3 @@
-[file name]: 123.py
-[file content begin]
 from telethon import TelegramClient, events
 import asyncio
 import re
@@ -15,19 +13,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Конфигурация
-API_ID = 36901544  # ЗАМЕНИ НА СВОЙ
-API_HASH = '43fe9955cd5ec97746ed835daf756b03'  # ЗАМЕНИ НА СВОЙ
-PHONE_NUMBER = '+13093265422'  # ТВОЙ НОМЕР
+# Конфигурация - ЗАМЕНИ ЭТИ ЗНАЧЕНИЯ НА СВОИ!
+API_ID = 36901544  # Твой API ID из my.telegram.org
+API_HASH = '43fe9955cd5ec97746ed835daf756b03'  # Твой API Hash из my.telegram.org
+PHONE_NUMBER = '+13093265422'  # Твой номер телефона
 
-# Группы где слушаем триггеры (ЗАМЕНИ НА СВОИ!)
+# Группы где слушаем триггеры (ЗАМЕНИ НА СВОИ ID групп!)
 TARGET_GROUPS = [
     -1003514324234,  # Группа 1
     -1003624451447,  # Группа 2
     -1003744344962,  # Группа 3
 ]
 
-# Триггер слова
+# Триггер слова (можно добавить свои)
 TRIGGER_WORDS = [
     'слет', 'ckt', 'cktу', 'cktн', 'ном', 'номер',
     'блок', 'заблок', 'блпк', 'блрк', 'нрм', 'слёт',
@@ -86,7 +84,6 @@ class SimpleBot:
                 # Для топиков
                 if topic_id and topic_id != 0:
                     # Формат: https://t.me/c/3514324234/4/15382
-                    # где 3514324234 - ID чата, 4 - топик, 15382 - сообщение
                     return f"https://t.me/c/{channel_id}/{topic_id}/{message_id}"
                 else:
                     # Без топика
@@ -95,16 +92,17 @@ class SimpleBot:
             # Для публичных чатов с username
             else:
                 try:
-                    chat = self.client.loop.run_until_complete(
-                        self.client.get_entity(chat_id)
-                    )
+                    # Используем существующий event loop
+                    import asyncio
+                    loop = asyncio.get_event_loop()
+                    chat = loop.run_until_complete(self.client.get_entity(chat_id))
                     if hasattr(chat, 'username') and chat.username:
                         if topic_id and topic_id != 0:
                             return f"https://t.me/{chat.username}/{topic_id}?thread={message_id}"
                         else:
                             return f"https://t.me/{chat.username}/{message_id}"
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Не удалось получить username для чата {chat_id}: {e}")
             
             return f"chat_id: {chat_id}, message_id: {message_id}"
             
@@ -369,8 +367,6 @@ ID бота: {self.me.id}
                 await event.reply(help_text)
 
 async def main():
-    # На Render не нужно HTTP сервера, если только нет веб-сервиса
-    # Render сам мониторит процесс
     logger.info("Запуск бота...")
     
     bot = SimpleBot()
@@ -381,14 +377,14 @@ async def main():
         logger.info("Бот остановлен пользователем")
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
-        # Если проблема с сессией, предлагаем удалить старую
         if "authorization key" in str(e) and "two different IP addresses" in str(e):
             logger.error("""
             ⚠️ ОШИБКА СЕССИИ!
             Сессия была использована с разных IP адресов.
             Решение:
-            1. Удали файлы session_bot_render.session и session_bot_render.session-journal
-            2. Перезапусти бота
+            1. В панели Render зайди в консоль (Shell)
+            2. Выполни: rm session_bot_render_render.session*
+            3. Перезапусти деплой
             """)
     finally:
         logger.info("Бот остановлен")
@@ -407,4 +403,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Неожиданная ошибка: {e}")
         sys.exit(1)
-[file content end]
