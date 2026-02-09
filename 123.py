@@ -1,39 +1,12 @@
+[file name]: 123.py
+[file content begin]
 from telethon import TelegramClient, events
 import asyncio
 import re
 import logging
 from datetime import datetime
-from aiohttp import web
-import threading
-
-# Простой HTTP сервер для Render
-async def handle_ping(request):
-    return web.Response(text="Bot is alive")
-
-def start_http_server():
-    app = web.Application()
-    app.router.add_get('/', handle_ping)
-    app.router.add_get('/ping', handle_ping)
-    app.router.add_get('/health', handle_ping)
-    
-    runner = web.AppRunner(app)
-    
-    async def start():
-        await runner.setup()
-        site = web.TCPSite(runner, '0.0.0.0', 8080)
-        await site.start()
-        print("✅ HTTP сервер запущен на порту 8080")
-    
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(start())
-    loop.run_forever()
-
-# Запускаем HTTP сервер в отдельном потоке
-http_thread = threading.Thread(target=start_http_server, daemon=True)
-http_thread.start()
-
+import os
+import sys
 
 # Настройка логирования
 logging.basicConfig(
@@ -41,6 +14,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
 # Конфигурация
 API_ID = 36901544  # ЗАМЕНИ НА СВОЙ
 API_HASH = '43fe9955cd5ec97746ed835daf756b03'  # ЗАМЕНИ НА СВОЙ
@@ -62,7 +36,12 @@ TRIGGER_WORDS = [
 
 class SimpleBot:
     def __init__(self):
-        self.client = TelegramClient('session_bot', API_ID, API_HASH)
+        # Используем уникальное имя сессии для избежания конфликтов
+        session_name = 'session_bot_render'
+        if 'RENDER' in os.environ:
+            session_name += '_render'
+        
+        self.client = TelegramClient(session_name, API_ID, API_HASH)
         
         # Текущий номер
         self.current_number = None
@@ -80,14 +59,18 @@ class SimpleBot:
     
     async def start(self):
         """Запуск бота"""
-        await self.client.start(phone=PHONE_NUMBER)
-        self.me = await self.client.get_me()
-        logger.info(f"Авторизован как: {self.me.first_name} (@{self.me.username})")
-        logger.info(f"Слушаю триггеры в {len(TARGET_GROUPS)} группах")
-        logger.info("Бот запущен! Кидай номер в избранное")
-        
-        self.register_handlers()
-        await self.client.run_until_disconnected()
+        try:
+            await self.client.start(phone=PHONE_NUMBER)
+            self.me = await self.client.get_me()
+            logger.info(f"Авторизован как: {self.me.first_name} (@{self.me.username})")
+            logger.info(f"Слушаю триггеры в {len(TARGET_GROUPS)} группах")
+            logger.info("Бот запущен! Кидай номер в избранное")
+            
+            self.register_handlers()
+            await self.client.run_until_disconnected()
+        except Exception as e:
+            logger.error(f"Ошибка запуска: {e}")
+            raise
     
     def get_message_link(self, chat_id, message_id, topic_id=0):
         """Получаем правильную ссылку на сообщение"""
@@ -111,12 +94,17 @@ class SimpleBot:
             
             # Для публичных чатов с username
             else:
-                chat = self.client.get_input_entity(chat_id)
-                if hasattr(chat, 'username') and chat.username:
-                    if topic_id and topic_id != 0:
-                        return f"https://t.me/{chat.username}/{topic_id}?thread={message_id}"
-                    else:
-                        return f"https://t.me/{chat.username}/{message_id}"
+                try:
+                    chat = self.client.loop.run_until_complete(
+                        self.client.get_entity(chat_id)
+                    )
+                    if hasattr(chat, 'username') and chat.username:
+                        if topic_id and topic_id != 0:
+                            return f"https://t.me/{chat.username}/{topic_id}?thread={message_id}"
+                        else:
+                            return f"https://t.me/{chat.username}/{message_id}"
+                except:
+                    pass
             
             return f"chat_id: {chat_id}, message_id: {message_id}"
             
@@ -381,15 +369,42 @@ ID бота: {self.me.id}
                 await event.reply(help_text)
 
 async def main():
+    # На Render не нужно HTTP сервера, если только нет веб-сервиса
+    # Render сам мониторит процесс
+    logger.info("Запуск бота...")
+    
     bot = SimpleBot()
     
     try:
         await bot.start()
+    except KeyboardInterrupt:
+        logger.info("Бот остановлен пользователем")
     except Exception as e:
-        logger.error(f"Ошибка: {e}")
+        logger.error(f"Критическая ошибка: {e}")
+        # Если проблема с сессией, предлагаем удалить старую
+        if "authorization key" in str(e) and "two different IP addresses" in str(e):
+            logger.error("""
+            ⚠️ ОШИБКА СЕССИИ!
+            Сессия была использована с разных IP адресов.
+            Решение:
+            1. Удали файлы session_bot_render.session и session_bot_render.session-journal
+            2. Перезапусти бота
+            """)
     finally:
         logger.info("Бот остановлен")
 
 if __name__ == "__main__":
-    asyncio.run(main())
-
+    # Проверяем, запущен ли на Render
+    if 'RENDER' in os.environ:
+        logger.info("Запуск на Render обнаружен")
+    
+    # Запускаем бота
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Программа завершена")
+        sys.exit(0)
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка: {e}")
+        sys.exit(1)
+[file content end]
