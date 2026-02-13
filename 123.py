@@ -14,16 +14,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Конфигурация - ЗАМЕНИ ЭТИ ЗНАЧЕНИЯ НА СВОИ!
-API_ID = 36901544  # Твой API ID из my.telegram.org
-API_HASH = '43fe9955cd5ec97746ed835daf756b03'  # Твой API Hash из my.telegram.org
-PHONE_NUMBER = '+13093265422'  # Твой номер телефона
+API_ID = 39018545  # Твой API ID из my.telegram.org
+API_HASH = 'dcd1517d9722a45574fc8109b31ace2e'  # Твой API Hash из my.telegram.org
+PHONE_NUMBER = '+916268273676'  # Твой номер телефона
 
 # Группы где слушаем триггеры (ЗАМЕНИ НА СВОИ ID групп!)
 TARGET_GROUPS = [
-    -1003514324234,  # Группа 1
-    -1003624451447,  # Группа 2
-    -1003744344962,  # Группа 3
-    -1003806924449,
+    -1003794506501,  # Группа 1
+    -1003514324234,  # Группа 2
 ]
 
 # Триггер слова (можно добавить свои)
@@ -413,5 +411,6 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Неожиданная ошибка: {e}")
         sys.exit(1)
+
 
 
