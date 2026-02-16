@@ -31,6 +31,21 @@ TRIGGER_WORDS = [
     'sl', 'slet', 'nomer', 'nom'
 ]
 
+# СПИСОК ИГНОРИРУЕМЫХ ПОЛЬЗОВАТЕЛЕЙ (ДОБАВЛЯЙ СЮДА ID)
+IGNORED_USERS = [
+    8084863298,  # АйТи
+    8211946107,  
+    8372953991,
+    8318549461,
+    574533206,
+    8574757489,
+    8496326378,
+    # Другой тип
+    # Добавляй новые ID сюда
+    # 123456789,
+    # 987654321,
+]
+
 class SimpleBot:
     def __init__(self):
         # Используем имя сессии 'session_bot' как у тебя
@@ -48,9 +63,20 @@ class SimpleBot:
         # Сохраняем инфу о последней отправке
         self.last_sent_info = {}
         
+        # Словарь для подсчета триггеров от пользователей (для анти-спама)
+        self.user_trigger_count = {}
+        
         self.me = None
         
         logger.info("Бот инициализирован")
+        logger.info(f"Загружен список игнорируемых пользователей: {len(IGNORED_USERS)} чел.")
+    
+    def is_user_ignored(self, user_id):
+        """Проверяем, игнорируется ли пользователь"""
+        if user_id in IGNORED_USERS:
+            logger.info(f"Пользователь {user_id} в списке игнорируемых - пропускаем")
+            return True
+        return False
     
     async def start(self):
         """Запуск бота"""
@@ -70,6 +96,7 @@ class SimpleBot:
             self.me = await self.client.get_me()
             logger.info(f"✅ Авторизован как: {self.me.first_name} (@{self.me.username})")
             logger.info(f"Слушаю триггеры в {len(TARGET_GROUPS)} группах")
+            logger.info(f"Игнорирую {len(IGNORED_USERS)} пользователей")
             logger.info("Бот запущен! Кидай номер в избранное")
             
             self.register_handlers()
@@ -140,6 +167,7 @@ class SimpleBot:
                 self.is_waiting_trigger = True
                 self.sent_to_chats.clear()
                 self.last_sent_info.clear()
+                self.user_trigger_count.clear()  # Очищаем счетчики триггеров
                 
                 logger.info(f"✅ ЗАПОМНИЛ НОМЕР: {phone}")
                 await event.reply(f"✅ Номер {phone} принят!\nЖду триггеры...")
@@ -147,7 +175,13 @@ class SimpleBot:
         # 2. Обработка триггеров в целевых группах
         @self.client.on(events.NewMessage(chats=TARGET_GROUPS))
         async def handle_group_triggers(event):
+            # Пропускаем свои сообщения
             if event.sender_id == self.me.id:
+                return
+            
+            # ПРОВЕРЯЕМ - ИГНОРИРУЕМ ЛИ ПОЛЬЗОВАТЕЛЯ
+            if self.is_user_ignored(event.sender_id):
+                logger.info(f"Игнорирую сообщение от пользователя {event.sender_id}")
                 return
             
             if not self.is_waiting_trigger or not self.current_number:
@@ -160,6 +194,9 @@ class SimpleBot:
             
             if not is_trigger:
                 return
+            
+            # Увеличиваем счетчик триггеров для пользователя (для статистики)
+            self.user_trigger_count[event.sender_id] = self.user_trigger_count.get(event.sender_id, 0) + 1
             
             # Получаем chat_id и topic_id
             chat_id = event.chat_id
@@ -175,7 +212,7 @@ class SimpleBot:
             if chat_key in self.sent_to_chats:
                 return
             
-            logger.info(f"Триггер в чате {chat_id}, топик {topic_id}: '{text}'")
+            logger.info(f"Триггер от пользователя {event.sender_id} в чате {chat_id}, топик {topic_id}: '{text}'")
             
             try:
                 # Отправляем сообщение
@@ -205,7 +242,8 @@ class SimpleBot:
                     'topic_id': topic_id,
                     'message_id': sent_message_id,
                     'message_link': message_link,
-                    'timestamp': datetime.now().strftime('%H:%M:%S')
+                    'timestamp': datetime.now().strftime('%H:%M:%S'),
+                    'triggered_by': event.sender_id  # Добавляем кто вызвал триггер
                 }
                 
                 logger.info(f"Отправил номер {self.current_number} в чат {chat_id}, топик {topic_id}")
@@ -223,6 +261,7 @@ class SimpleBot:
 🎯 Топик: {topic_id if topic_id != 0 else 'General'}
 📨 ID сообщения: {sent_message_id}
 🕐 Время: {datetime.now().strftime('%H:%M:%S')}
+👤 Триггер от: {event.sender_id}
 
 🔗 Ссылка:
 {message_link}
@@ -250,7 +289,8 @@ class SimpleBot:
 
 ✅ Номер готов: {self.current_number}
 ⏱ Ожидает триггеров...
-📊 Отправлен в {len(self.sent_to_chats)} топиков"""
+📊 Отправлен в {len(self.sent_to_chats)} топиков
+👥 Игнорируется пользователей: {len(IGNORED_USERS)}"""
                 elif self.last_sent_info:
                     status_text = f"""📱 ПОСЛЕДНЯЯ ОТПРАВКА:
 
@@ -259,11 +299,17 @@ class SimpleBot:
 🎯 Топик: {self.last_sent_info.get('topic_id', 0) if self.last_sent_info.get('topic_id', 0) != 0 else 'General'}
 📨 ID сообщения: {self.last_sent_info.get('message_id', 'нет')}
 🕐 Время: {self.last_sent_info.get('timestamp', 'нет')}
+👤 Триггер от: {self.last_sent_info.get('triggered_by', 'нет')}
 
 🔗 Ссылка:
-{self.last_sent_info.get('message_link', 'нет')}"""
+{self.last_sent_info.get('message_link', 'нет')}
+
+👥 Игнорируется пользователей: {len(IGNORED_USERS)}"""
                 else:
-                    status_text = "❌ Нет активного номера\nКинь номер в избранное"
+                    status_text = f"""❌ Нет активного номера
+Кинь номер в избранное
+
+👥 Игнорируется пользователей: {len(IGNORED_USERS)}"""
                 
                 await event.reply(status_text)
             
@@ -271,6 +317,7 @@ class SimpleBot:
                 self.current_number = None
                 self.is_waiting_trigger = False
                 self.sent_to_chats.clear()
+                self.user_trigger_count.clear()
                 await event.reply("✅ Сброшено! Жду новый номер")
             
             elif text == '/groups':
@@ -283,6 +330,23 @@ class SimpleBot:
                 triggers_info = "🎯 ТРИГГЕР СЛОВА:\n\n" + "\n".join(TRIGGER_WORDS)
                 await event.reply(triggers_info)
             
+            elif text == '/ignored':
+                # Показываем список игнорируемых пользователей
+                if IGNORED_USERS:
+                    ignored_info = "🚫 ИГНОРИРУЕМЫЕ ПОЛЬЗОВАТЕЛИ:\n\n"
+                    for i, user_id in enumerate(IGNORED_USERS, 1):
+                        ignored_info += f"{i}. ID: {user_id}\n"
+                else:
+                    ignored_info = "✅ Список игнорируемых пуст"
+                
+                # Добавляем статистику по триггерам
+                if self.user_trigger_count:
+                    ignored_info += "\n\n📊 Статистика триггеров (за текущий номер):\n"
+                    for user_id, count in self.user_trigger_count.items():
+                        ignored_info += f"ID {user_id}: {count} триггеров\n"
+                
+                await event.reply(ignored_info)
+            
             elif text == '/last':
                 # Показать последнюю отправку
                 if self.last_sent_info:
@@ -293,6 +357,7 @@ class SimpleBot:
 🎯 Топик: {self.last_sent_info.get('topic_id', 0)}
 📨 ID сообщения: {self.last_sent_info.get('message_id', 'нет')}
 🕐 Время: {self.last_sent_info.get('timestamp', 'нет')}
+👤 Триггер от: {self.last_sent_info.get('triggered_by', 'нет')}
 
 🔗 Ссылка:
 {self.last_sent_info.get('message_link', 'нет')}
@@ -311,11 +376,44 @@ class SimpleBot:
                         self.is_waiting_trigger = True
                         self.sent_to_chats.clear()
                         self.last_sent_info.clear()
+                        self.user_trigger_count.clear()
                         await event.reply(f"✅ Номер {phone} установлен!\nЖду триггеры...")
                     else:
                         await event.reply("❌ Неверный формат номера")
                 else:
                     await event.reply("❌ Используй: /номер 79001234567")
+            
+            elif text.startswith('/addignore'):
+                # Команда для добавления ID в список игнорирования
+                parts = text.split()
+                if len(parts) == 2:
+                    try:
+                        new_id = int(parts[1])
+                        if new_id not in IGNORED_USERS:
+                            IGNORED_USERS.append(new_id)
+                            await event.reply(f"✅ Пользователь {new_id} добавлен в список игнорируемых\nВсего игнорируется: {len(IGNORED_USERS)}")
+                        else:
+                            await event.reply(f"❌ Пользователь {new_id} уже в списке")
+                    except ValueError:
+                        await event.reply("❌ Некорректный ID. Используй число")
+                else:
+                    await event.reply("❌ Используй: /addignore 123456789")
+            
+            elif text.startswith('/removeignore'):
+                # Команда для удаления ID из списка игнорирования
+                parts = text.split()
+                if len(parts) == 2:
+                    try:
+                        remove_id = int(parts[1])
+                        if remove_id in IGNORED_USERS:
+                            IGNORED_USERS.remove(remove_id)
+                            await event.reply(f"✅ Пользователь {remove_id} удален из списка игнорируемых\nВсего игнорируется: {len(IGNORED_USERS)}")
+                        else:
+                            await event.reply(f"❌ Пользователь {remove_id} не найден в списке")
+                    except ValueError:
+                        await event.reply("❌ Некорректный ID. Используй число")
+                else:
+                    await event.reply("❌ Используй: /removeignore 123456789")
             
             elif text == '/testlink':
                 # Тестовая команда для проверки ссылок
@@ -336,6 +434,7 @@ ID бота: {self.me.id}
 Текущий номер: {self.current_number or 'нет'}
 Ожидает триггер: {self.is_waiting_trigger}
 Отправлено в: {len(self.sent_to_chats)} топиков
+Игнорируется пользователей: {len(IGNORED_USERS)}
 
 📱 Последняя отправка:"""
                 
@@ -354,11 +453,17 @@ ID бота: {self.me.id}
 1. Кидаешь номер в избранное
 2. Бот запоминает его
 3. Ждет триггеры в группах
-4. При триггере → отправляет номер В ТОТ ЖЕ ТОПИК
-5. Отправляет тебе ССЫЛКУ на сообщение
-6. Один номер = одна отправка
+4. ИГНОРИРУЕТ сообщения от указанных пользователей
+5. При триггере от НЕ игнорируемого → отправляет номер
+6. Отправляет тебе ССЫЛКУ на сообщение
+7. Один номер = одна отправка
 
-🎯 Команды:
+🚫 Управление игнорированием:
+/ignored - список игнорируемых
+/addignore 123456789 - добавить ID в игнор
+/removeignore 123456789 - удалить ID из игнора
+
+🎯 Другие команды:
 /status - статус бота (со ссылкой)
 /last - показать последнюю отправку
 /reset - сбросить номер
@@ -411,6 +516,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Неожиданная ошибка: {e}")
         sys.exit(1)
-
-
-
